@@ -1,16 +1,17 @@
-# --- Stage 1: Build Magento (Mage-OS) ---
+# -------- Stage 1: Build Magento project (no PHP extensions needed here) --------
 FROM composer:2 AS build
 WORKDIR /app
 ENV COMPOSER_MEMORY_LIMIT=-1
-RUN apt-get update && apt-get install -y libicu-dev git unzip
-RUN docker-php-ext-install intl bcmath || true
+# composer:2 is Alpine; use apk instead of apt-get
+RUN apk add --no-cache git unzip
+# Create the project while ignoring platform reqs in the build stage
 RUN composer create-project --repository=https://repo.mage-os.org/ \
-    mage-os/project-community-edition /app --no-dev --prefer-dist
+    mage-os/project-community-edition /app --no-dev --prefer-dist --ignore-platform-reqs
 
-# --- Stage 2: Runtime (PHP 8.2 + Apache) ---
+# -------- Stage 2: Runtime (PHP 8.2 + Apache + required extensions) --------
 FROM php:8.2-apache
 
-# Install required libs and PHP extensions
+# System libs + PHP extensions Magento needs
 RUN apt-get update && apt-get install -y \
     git curl unzip libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
     libicu-dev libxml2-dev libxslt1.1 libxslt1-dev libonig-dev \
@@ -29,14 +30,15 @@ RUN { \
 
 WORKDIR /var/www/html
 
-# Copy Composer and Magento files
+# Bring Composer into runtime
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+# Copy the Magento project created in the build stage
 COPY --from=build /app /var/www/html
 
-# Ensure vendor exists (safety)
-RUN composer install --no-dev --prefer-dist --no-interaction
+# Ensure vendor/ is correct with real extensions present
+RUN COMPOSER_MEMORY_LIMIT=-1 composer install --no-dev --prefer-dist --no-interaction
 
-# Fix DocumentRoot
+# Serve from /pub
 RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/pub|g' /etc/apache2/sites-available/000-default.conf \
  && sed -i 's|<Directory /var/www/>|<Directory /var/www/html/pub/>|g' /etc/apache2/apache2.conf
 
