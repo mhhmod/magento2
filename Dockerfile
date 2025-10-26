@@ -1,14 +1,16 @@
-# --- Build stage: create Mage-OS project (no Marketplace keys) ---
+# --- Stage 1: Build Magento (Mage-OS) ---
 FROM composer:2 AS build
 WORKDIR /app
-# Give Composer enough memory
 ENV COMPOSER_MEMORY_LIMIT=-1
+RUN apt-get update && apt-get install -y libicu-dev git unzip
+RUN docker-php-ext-install intl bcmath || true
 RUN composer create-project --repository=https://repo.mage-os.org/ \
     mage-os/project-community-edition /app --no-dev --prefer-dist
 
-# --- Runtime: PHP 8.2 + Apache + required extensions ---
+# --- Stage 2: Runtime (PHP 8.2 + Apache) ---
 FROM php:8.2-apache
 
+# Install required libs and PHP extensions
 RUN apt-get update && apt-get install -y \
     git curl unzip libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
     libicu-dev libxml2-dev libxslt1.1 libxslt1-dev libonig-dev \
@@ -17,7 +19,7 @@ RUN apt-get update && apt-get install -y \
  && a2enmod rewrite headers \
  && rm -rf /var/lib/apt/lists/*
 
-# PHP tweaks
+# PHP tuning
 RUN { \
       echo "memory_limit=1024M"; \
       echo "max_execution_time=180"; \
@@ -26,16 +28,15 @@ RUN { \
     } > /usr/local/etc/php/conf.d/magento.ini
 
 WORKDIR /var/www/html
-# Copy the app that already includes composer.json/lock
+
+# Copy Composer and Magento files
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY --from=build /app /var/www/html
 
-# --- Ensure vendor/ exists even if build stage was cached/trimmed ---
-# 1) bring composer into the runtime image
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-# 2) install dependencies (no dev) – creates vendor/
-RUN COMPOSER_MEMORY_LIMIT=-1 composer install --no-dev --prefer-dist --no-interaction
+# Ensure vendor exists (safety)
+RUN composer install --no-dev --prefer-dist --no-interaction
 
-# Serve from /pub
+# Fix DocumentRoot
 RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/pub|g' /etc/apache2/sites-available/000-default.conf \
  && sed -i 's|<Directory /var/www/>|<Directory /var/www/html/pub/>|g' /etc/apache2/apache2.conf
 
