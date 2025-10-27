@@ -1,20 +1,23 @@
-# -------- Stage 1: Build Magento project (no PHP extensions needed here) --------
+# -------- Stage 1: Build Magento project (Alpine image; no apt-get here) --------
 FROM composer:2 AS build
 WORKDIR /app
 ENV COMPOSER_MEMORY_LIMIT=-1
-# composer:2 is Alpine; use apk instead of apt-get
-RUN apk add --no-cache git unzip
-# Create the project while ignoring platform reqs in the build stage
-RUN composer create-project --repository=https://repo.mage-os.org/ \
-    mage-os/project-community-edition /app --no-dev --prefer-dist --ignore-platform-reqs
 
-# -------- Stage 2: Runtime (PHP 8.2 + Apache + required extensions) --------
+# Alpine packages for composer
+RUN apk add --no-cache git unzip
+
+# Create Magento (Mage-OS) project without Marketplace keys
+RUN composer create-project --repository=https://repo.mage-os.org/ \
+    mage-os/project-community-edition /app \
+    --no-dev --prefer-dist --ignore-platform-reqs
+
+# -------- Stage 2: Runtime (Debian PHP 8.2 + Apache + required extensions) --------
 FROM php:8.2-apache
 
-# System libs + PHP extensions Magento needs
+# System libs + PHP extensions Magento needs (now we use apt-get here)
 RUN apt-get update && apt-get install -y \
     git curl unzip libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
-    libicu-dev libxml2-dev libxslt1.1 libxslt1-dev libonig-dev \
+    libicu-dev libxml2-dev libxslt1.1 libxslt1-dev \
  && docker-php-ext-configure gd --with-freetype --with-jpeg \
  && docker-php-ext-install gd intl pdo_mysql zip bcmath soap xsl \
  && a2enmod rewrite headers \
@@ -30,19 +33,18 @@ RUN { \
 
 WORKDIR /var/www/html
 
-# Bring Composer into runtime
+# Bring Composer into runtime and copy built app
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-# Copy the Magento project created in the build stage
 COPY --from=build /app /var/www/html
 
-# Ensure vendor/ is correct with real extensions present
+# Make sure vendor/ is present after real extensions exist
 RUN COMPOSER_MEMORY_LIMIT=-1 composer install --no-dev --prefer-dist --no-interaction
 
 # Serve from /pub
 RUN sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/html/pub|g' /etc/apache2/sites-available/000-default.conf \
  && sed -i 's|<Directory /var/www/>|<Directory /var/www/html/pub/>|g' /etc/apache2/apache2.conf
 
-# Entry + permissions
+# Entrypoint + permissions
 COPY docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh \
  && chown -R www-data:www-data /var/www/html \
