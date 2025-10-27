@@ -2,10 +2,10 @@
 set -e
 cd /var/www/html
 
-# Make Apache listen on Railway's random PORT if provided
+# Make Apache listen on Railway's assigned $PORT
 if [ -n "$PORT" ] && [ "$PORT" != "80" ]; then
   sed -i "s/Listen 80/Listen $PORT/" /etc/apache2/ports.conf
-  sed -i "s/*:80/*:$PORT/" /etc/apache2/sites-available/000-default.conf
+  sed i "s/*:80/*:$PORT/" /etc/apache2/sites-available/000-default.conf
 fi
 
 # First-time install
@@ -27,14 +27,7 @@ if [ ! -f app/etc/env.php ]; then
     --currency="USD" \
     --timezone="UTC" \
     --use-rewrites=1 \
-    --search-engine="opensearch" || true
-
-  # If OpenSearch is not present on free tier, fall back to MySQL search
-  if ! bin/magento indexer:show-mode >/dev/null 2>&1 ; then
-    echo ">> Falling back to MySQL search engine..."
-    bin/magento config:set catalog/search/engine mysql || true
-    bin/magento setup:upgrade || true
-  fi
+    --search-engine="mysql" || true
 
   bin/magento deploy:mode:set production || true
   bin/magento cache:flush || true
