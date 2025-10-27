@@ -19,9 +19,11 @@ RUN apt-get update && apt-get install -y \
     git curl unzip libzip-dev libpng-dev libjpeg-dev libfreetype6-dev \
     libicu-dev libxml2-dev libxslt1.1 libxslt1-dev \
  && docker-php-ext-configure gd --with-freetype --with-jpeg \
- && docker-php-ext-install gd intl pdo_mysql zip bcmath soap xsl \
+-&& docker-php-ext-install gd intl pdo_mysql zip bcmath soap xsl \
++&& docker-php-ext-install gd intl pdo_mysql zip bcmath soap xsl sockets ftp \
  && a2enmod rewrite headers \
  && rm -rf /var/lib/apt/lists/*
+
 
 # PHP tuning
 RUN { \
