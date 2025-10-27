@@ -11,16 +11,18 @@ RUN composer create-project --repository=https://repo.mage-os.org/ \
 # -------- Stage 2: runtime (Debian PHP 8.2 + Apache + full PHP extensions) --------
 FROM php:8.2-apache
 
-# System libs + headers
+# system libs (runtime stage)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl unzip libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
-    libicu-dev libxml2-dev libxslt1-dev \
+    git curl unzip pkg-config \
+    libzip-dev libpng-dev libjpeg62-turbo-dev libfreetype6-dev \
+    libicu-dev libxml2-dev libxslt1-dev libonig-dev \   # <-- add libonig-dev
  && rm -rf /var/lib/apt/lists/*
 
-# PHP extensions Magento/Mage-OS needs
+# PHP extensions (keep mbstring here now that libonig-dev is present)
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
  && docker-php-ext-install -j$(nproc) gd intl pdo_mysql zip bcmath soap xsl sockets ftp mbstring \
  && a2enmod rewrite headers
+
 
 # PHP tuning
 RUN { \
